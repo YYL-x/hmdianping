@@ -70,23 +70,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
      * @param session   session中获取验证码，保存用户到session
      * @return
      */
+// ... existing code ...
     @Override
     public Result login(LoginFormDTO loginForm, HttpSession session) {
         // 校验手机号
         String phone = loginForm.getPhone();
         if (RegexUtils.isPhoneInvalid(phone)) {
-            // 格式不符合，返回错误信息
-            Result.fail("手机号格式错误！");
+            return Result.fail("手机号格式错误！");
         }
+
         // 从redis中获取验证码并校验
         String cacheCode = stringRedisTemplate.opsForValue().get(LOGIN_CODE_KEY + phone);
         String code = loginForm.getCode();
 
         // 如果没有发送验证码，或者session中验证码过期、验证码不一致
-        if (cacheCode == null || !cacheCode.toString().equals(code)) {
-            // 不一致报错
+        if (cacheCode == null || !cacheCode.equals(code)) {
             return Result.fail("验证码错误");
         }
+
         // 一致，根据手机号查询用户
         User user = query().eq("phone", phone).one();
         //用户不存在就创建一个用户到数据库
@@ -94,7 +95,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             user = createUserWithPhone(phone);
         }
 
-        // 判断用户是否存在
+        // 生成token（保持标准UUID格式，带横杠）
         String token = UUID.randomUUID().toString();
         UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
         Map<String, Object> userMap = BeanUtil.beanToMap(userDTO, new HashMap<>(),
@@ -104,9 +105,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         stringRedisTemplate.opsForHash().putAll(RedisConstants.LOGIN_USER_KEY + token, userMap);
         stringRedisTemplate.expire(RedisConstants.LOGIN_USER_KEY + token, RedisConstants.LOGIN_USER_TTL, TimeUnit.MINUTES);
 
-        //返回OK
+        //返回token
         return Result.ok(token);
     }
+// ... existing code ...
+
+
 
     /**
      * 根据手机号创建用户
